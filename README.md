@@ -19,78 +19,11 @@
 
 ```bash
 # STAR-2.4.2a
-
-### For users with access to the ICGC pipeline:
-
-python star_align.py \
---genomeDir <star_index_path> \
---FastqFileIn <input_fastq_path> \
---workDir <work_dir> \
---out <output_bam> \
---genomeFastaFiles <reference> \
---runThreadN 8 \
---outFilterMultimapScoreRange 1 \
---outFilterMultimapNmax 20 \
---outFilterMismatchNmax 10 \
---alignIntronMax 500000 \
---alignMatesGapMax 1000000 \
---sjdbScore 2 \
---limitBAMsortRAM 0 \
---alignSJDBoverhangMin 1 \
---genomeLoad NoSharedMemory \
---outFilterMatchNminOverLread 0.33 \
---outFilterScoreMinOverLread 0.33 \
---twopass1readsN -1 \
---sjdbOverhang 100 \
---outSAMstrandField intronMotif \
---outSAMunmapped Within
-
-### For users without access to the ICGC pipeline:
-
 ### Step 1: Building the STAR index.*
-
-STAR
---runMode genomeGenerate
---genomeDir <star_index_path>
---genomeFastaFiles <reference>
---sjdbOverhang 100
---sjdbGTFfile <gencode.v22.annotation.gtf>
---runThreadN 8
-
 ### Step 2: Alignment 1st Pass.
-
-STAR
---genomeDir <star_index_path>
---readFilesIn <fastq_left_1>,<fastq_left2>,... <fastq_right_1>,<fastq_right_2>,...
---runThreadN <runThreadN>
---outFilterMultimapScoreRange 1
---outFilterMultimapNmax 20
---outFilterMismatchNmax 10
---alignIntronMax 500000
---alignMatesGapMax 1000000
---sjdbScore 2
---alignSJDBoverhangMin 1
---genomeLoad NoSharedMemory
---readFilesCommand <bzcat|cat|zcat>
---outFilterMatchNminOverLread 0.33
---outFilterScoreMinOverLread 0.33
---sjdbOverhang 100
---outSAMstrandField intronMotif
---outSAMtype None
---outSAMmode None
-
 ### Step 3: Intermediate Index Generation.
 
-STAR
---runMode genomeGenerate
---genomeDir <output_path>
---genomeFastaFiles <reference>
---sjdbOverhang 100
---runThreadN <runThreadN>
---sjdbFileChrStartEnd <SJ.out.tab from previous step>
-
 ### Step 4: Alignment 2nd Pass.
-
 STAR
 --genomeDir <output_path from previous step>
 --readFilesIn <fastq_left_1>,<fastq_left2>,... <fastq_right_1>,<fastq_right_2>,...
