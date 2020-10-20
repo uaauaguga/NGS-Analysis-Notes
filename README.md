@@ -55,7 +55,7 @@ STAR
 # -f 13: both mate should unmapped
 # -F 0x200: reads should pass quality filter
 # samtools sort -n : sort by read id
-samtools view -h -f 13 -F 0x200 input.bam | samtools sort -n | samtools view -b > unmapped.bam
+samtools view -h -f 13 -F 0x200 input.bam | samtools sort -n  > unmapped.bam
 ```
 ## Get Reads Aligned to Viral Decoy
 
