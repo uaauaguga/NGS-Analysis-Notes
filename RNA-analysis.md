@@ -13,7 +13,7 @@
 
 ### Add reads group to bam file
   - gatk require these fields
-  ```{bash}
+  ```bash
   gatk AddOrReplaceReadGroups --java-options -Xmx4G \
         --INPUT {input.bam} --OUTPUT {output.bam} -SO  coordinate \
         --RGLB library --RGPL illumina --RGPU HiSeq2000 --RGSM {sample_id} > {log} 2>&1
@@ -23,7 +23,7 @@
 ### SNP calling
   - Split Reads by "N" in cigar string, input is bam file with reads group
   - Get red of spliced junctions
-  ```{bash}
+  ```bash
   gatk SplitNCigarReads --java-options -Xmx4G --input {input.bam} \
   --output {output.bam} \
   --create-output-bam-index -R genome/fasta/hg38.fa \
@@ -31,13 +31,13 @@
   ```
   - Here the base quality recalibration step is skipped, as it is time consuming and makes little difference
   - Run HaplotypeCaller, using bam output of SplitNCigarReads as input
-  ```{bash}
+  ```bash
   gatk HaplotypeCaller --java-options -Xmx4G -R genome/fasta/hg38.fa \
         -I {input.bam} -O {output.vcf} \
         --tmp-dir tmp 2>  {log}
   ``` 
   - Filter the vcf file
-  ```{bash}
+  ```bash
   gatk VariantFiltration --java-options -Xmx4G \
         -R genome/fasta/hg38.fa -V {input.vcf} \
         -window 35 -cluster 3 \
@@ -50,13 +50,13 @@
 ### RNA editing analysis
   - long RNA editing analysis
   - Input: bam with read group
-  ```{bash}
+  ```bash
   gatk ASEReadCounter --java-options -Xmx4G --input {input.bam} --variant genome/vcf/REDIportal.vcf.gz  --reference genome/fasta/hg38.fa --output-format TABLE 2> {log} | gzip -c > {output.count}
   ```
 
 ### ASE analysis
   - Replace the vcf file in RNA editing analysis with COSMIC and dbSNP
-  ```{bash}
+  ```bash
   gatk ASEReadCounter --java-options -Xmx4G --input {input.bam} --variant genome/vcf/dbSNP.vcf.gz.vcf.gz --reference genome/fasta/hg38.fa --output-format TABLE 2> {log} | gzip -c > {output.dbSNP-count}
   gatk ASEReadCounter --java-options -Xmx4G --input {input.bam} --variant genome/vcf/COSMIC.vcf.gz --reference genome/fasta/hg38.fa --output-format TABLE 2> {log} | gzip -c > {output.COSMIC-count}
   ```
@@ -69,14 +69,14 @@
     - That means for bam input or STAR alignment, different --libType generate same result
   - For each run, positive and negative samples should be specified. For very large sample size, the program may crash.
   - Not friendly for large scale analysis or samples with mautiple class
-  ```{bash}
+  ```bash
   python2 /BioII/lulab_b/jinyunfan/software/rMATS.4.0.2/rMATS-turbo-Linux-UCS4/rmats.py --b1 {pos_path} --b2 {neg_path} --gtf genome/gtf/gencode.v27.annotation.gtf --od {outdir} -t paired  --libType fr-firststrand --readLength 150 
   python2 /BioII/lulab_b/jinyunfan/software/rMATS.4.0.2/rMATS-turbo-Linux-UCS4/rmats.py --b1 output/test/splicing/bam-path/PDAC.txt  --b2 output/test/splicing/bam-path/HD.txt --gtf genome/gtf/gencode.v27.annotation.gtf --od output/test/splicing/rmats -t paired  --libType fr-firststrand --readLength 150
   ``` 
   - Summarize the result, assign a unique ID to each alternative splicing event
   - The input pos and neg sample ids should same as that provided for rMATS
   - splicing_type if one of MXE A3SS A5SS SE RI 
-  ```{bash}
+  ```bash
   python3 scripts/summarize-splicing.py --input {rmats_outdir}/{splicing_type}.MATS.JC.txt  --outdir {outdir} --type {splicing_type} --method JC  --pos {pos}  --neg  {neg}
   #python3 scripts/summarize-splicing.py --input output/test/splicing/rmats/SE.MATS.JC.txt  --type SE --method JC --pos metadata/test/PDAC.txt --neg metadata/test/HD.txt  --outdir output/test/splicing/matrix
   ``` 
@@ -86,7 +86,7 @@
   - The DaPar software asks for wig input, while actually it needs a bedgraph , suggested by its example
     - See /BioII/lulab_b/jinyunfan/software/dapars-modified/DaPars_Test_Dataset/Condition_B_chrX.wig
   - To generate the annotation
-  ```{bash}
+  ```bash
   # Prepare transcript information in bed12 format
   # /BioII/lulab_b/jinyunfan/software/gffread-0.11.4.Linux_x86_64/gffread
   gffread genome/gtf/gencode.v27.annotation.gtf --bed > genome/bed/gencode.v27.annotation.bed
@@ -97,11 +97,11 @@
   python /BioII/lulab_b/jinyunfan/software/dapars-modified/src/DaPars_Extract_Anno.py -b genome/bed/gencode.v27.annotation.12.bed -s genome/tx2gene.txt -o genome/bed/gencode.v27.annotation.UTR3p.bed
   ```
   - To generate the "wig" file:
-  ```{bash}
+  ```bash
   bedtools genomecov -ibam {input.bam} -bg -split | sort-bed - > {output.wig}
   ``` 
   - Follow the documentation to run the script
-  ```{bash}
+  ```bash
   # Prepare config file
   scripts/prepareDaParConfig.py -p metadata/test/PDAC.txt -n metadata/test/HD.txt -i output/test/APA/wig -o output/test/APA/dapar --config output/test/APA/config.txt #python3 
   # Run DaPar
@@ -117,23 +117,23 @@
     - If paired end, ISF for forward stranded, ISR for reverse stranded, IU for unstranded
     - Also has an automatic strandness detection feature: --libType A
     - See https://salmon.readthedocs.io/en/latest/salmon.html#what-s-this-libtype for detail
-  ```{bash}
+  ```bash
   #salmon 1.3.0
   salmon quant --threads {threads} --libType {libtype} -i genome/salmon-index -1 {input.fastq1} -2 {input.fastq2} --validateMappings --gcBias -o {outdir}
   ```
   - Summarize salmon output
-  ```{bash}
+  ```bash
   scripts/prepareTxQuantMat.py -i output/test/salmon -o output/test/TPM-by-tx.txt
   ```
   - Assign expression of transcript with similar TSS to same promoter
-  ```{bash}
+  ```bash
   scripts/getPromoterActivity.py -i output/test/TPM-by-tx.txt -o output/test/TPM-by-promoter.txt 
   ``` 
 
 
 ### TE element analysis
   - Analysis with salmon TE
-  ```{bash}
+  ```bash
   #/BioII/lulab_b/jinyunfan/anaconda3/envs/quantification/bin/python
   tools/SalmonTE/SalmonTE.py quant --reference=hs --num_threads=6 --outpath=output/{sample_id}  {fastq1} {fastq2}
   ``` 
@@ -141,7 +141,7 @@
 
 ### Chimeric RNA quantification
   - Align reads that unaligned to circRNA to curated jucntion sequences with STAR
-  ```{bash}
+  ```bash
   STAR --genomeDir genome/chimera-star-index \
             --readFilesIn {input.reads1} {input.reads2} \
             --runThreadN 4 \
@@ -168,6 +168,6 @@
 ### Metagenomic classification of unmapped sequences
   - Input: reads unaligned to curated chimeras
   - Database: /Share2/home/lulab/jinyunfan/data/kraken2db/standard-db
-  ```{bash}
+  ```bash
   kraken2 --db {input.database} --paired --threads {threads} --unclassified-out {params.unclassified} --report {output.report}  --use-names  {input.fastq1} {input.fastq2}  >  {output.assignment} 2> {log} 
   ```
