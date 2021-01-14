@@ -3,12 +3,13 @@
 ### Starting point
 - Copy the scripts, genome  and tools directory in /BioII/lulab_b/jinyunfan/projects/diagnostic-marker/RNA-analysis into an empty folder
 - Prepare required input files
+  - Long RNA
   - cleaned fastq files (no adapter, remove spike in if any, remove potential UniVec contamination, remove rRNA)
   - genome aligned bam files, sorted by coordinate, with duplication removed
     - Unaligned reads of STAR mapping in exSEEK may out of order due to a bug in STAR_2.5.3a_modified
     - use scripts/checkFastqPairing.py to check whether circRNA_1.fastq.gz and circRNA_2.fastq.gz is out of order
     - If it is the case, may rerun mapping, and fix unmapped reads of each step with repair.sh in bbmap ( see Chimeric RNA quantification section )
-  - reads unmapped to circRNA
+  - Reads unmapped to circRNA
 
 
 ### Add reads group to bam file
@@ -115,6 +116,7 @@
   scripts/prepareTxQuantMat.py -i output/test/salmon -o output/test/TPM-by-tx.txt
   ```
   - Assign expression of transcript with similar TSS to same promoter
+  - In genome/promoter/tx2tss.10.txt, TSSs with gap smaller than 10 nt were collapsed
   ```bash
   scripts/getPromoterActivity.py -i output/test/TPM-by-tx.txt -o output/test/TPM-by-promoter.txt 
   ``` 
