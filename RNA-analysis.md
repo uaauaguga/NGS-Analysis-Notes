@@ -12,7 +12,20 @@
   - Reads unmapped to circRNA
 
 
+### For quality control and sanity check
+  - Plot the coverage around exon 5 prime and 3 prime boundary
+  - Strandness can be either `forward`, `reverse` or `no`
+  ```bash
+  scripts/plotExonBoundary.py -i {bam} -s {strandness} -c {coverage} --pdf {plot}
+  ``` 
+  - Assign read pairs to different genomic regions
+  ```bash
+  scripts/readAssignment.py -s {strandness} -i {bam} -o {counts}
+  ```
+
+
 ### Add reads group to bam file
+  - gatk used: `/BioII/lulab_b/jinyunfan/software/GATK/gatk-4.1.4.0/gatk`
   - gatk require this field
   ```bash
   gatk AddOrReplaceReadGroups --java-options -Xmx4G \
@@ -116,7 +129,7 @@
   scripts/prepareTxQuantMat.py -i output/test/salmon -o output/test/TPM-by-tx.txt
   ```
   - Assign expression of transcript with similar TSS to same promoter
-  - In genome/promoter/tx2tss.10.txt, TSSs with gap smaller than 10 nt were collapsed
+  - In genome/promoter/tx2tss.10.txt, TSSs with gap smaller than 10 nt were collapsed to same TSS group (same promoter) 
   ```bash
   scripts/getPromoterActivity.py -i output/test/TPM-by-tx.txt -o output/test/TPM-by-promoter.txt 
   ``` 
@@ -144,6 +157,11 @@
             --seedPerWindowNmax 20
   # To fix the bug of STAR_2.5.3a_modified 
   /BioII/lulab_b/jinyunfan/software/bbmap/repair.sh in={output_prefix}/Unmapped.out.mate1 in2={output_prefix}/Unmapped.out.mate1 out=unmapped_1.fastq.gz out2=unmapped_2.fastq.gz overwrite=t 
+  ```
+  - Count reads mapped to chimeric junctions
+  - Strandness: forward, reverse or no 
+  ```bash
+  scripts/count_reads.py count_circrna -s {strandness} --paired-end -i {inbam} -o {output}
   ```
 
 
