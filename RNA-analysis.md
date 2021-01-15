@@ -1,7 +1,7 @@
 ## Notes for RNA analysis
 
 ### Starting point
-- Copy the scripts, genome  and tools directory in `/BioII/lulab_b/jinyunfan/projects/diagnostic-marker/RNA-analysis into an empty folder`
+- Copy the scripts, genome  and tools directory in `/BioII/lulab_b/jinyunfan/projects/diagnostic-marker/RNA-analysis｀ into an empty folder
 - Prepare required input files
   - Long RNA
   - cleaned fastq files (no adapter, remove spike in if any, remove potential UniVec contamination, remove rRNA)
