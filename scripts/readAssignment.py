@@ -30,7 +30,7 @@ def main():
                 line = line.strip()
                 if line.startswith("#") or len(line) == 0:
                     continue
-                fields = line.strip().split("\t") 
+                fields = line.split("\t") 
                 chrom,start,end,strand = fields[0],int(fields[1]),int(fields[2]),fields[5]
                 iv = HTSeq.GenomicInterval(chrom,start,end,strand = strand) 
                 ga[iv] += region
