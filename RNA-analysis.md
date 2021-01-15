@@ -14,7 +14,7 @@
 
 ### For quality control and sanity check
   - Plot the coverage around exon 5 prime and 3 prime boundary
-  - Strandness can be either `forward`, `reverse` or `no`
+    - Strandness can be either `forward`, `reverse` or `no`
   ```bash
   scripts/plotExonBoundary.py -i {bam} -s {strandness} -c {coverage} --pdf {plot}
   ``` 
@@ -78,8 +78,8 @@
 
 ### Alternative Splicing Analysis
   - rMATS
-  - Get bam path for position and negative set, see /BioII/lulab_b/jinyunfan/projects/diagnostic-marker/RNA-analysis/output/test/splicing/bam-path
-  - According to https://groups.google.com/g/rmats-user-group/c/qq5ryHPWrIc, --libType is not actually used if using bam of STAR alignment as input, this parameter actually passed to tophat for alignment
+  - Get bam path for position and negative set, see `/BioII/lulab_b/jinyunfan/projects/diagnostic-marker/RNA-analysis/output/test/splicing/bam-path`
+  - According to https://groups.google.com/g/rmats-user-group/c/qq5ryHPWrIc, `--libType` is not actually used if using bam of STAR alignment as input, this parameter actually passed to tophat for alignment
     - That means for bam input or STAR alignment, different --libType generate same result
   - For each run, positive and negative samples should be specified.
   - Not friendly for large sample size or samples with mautiple class
