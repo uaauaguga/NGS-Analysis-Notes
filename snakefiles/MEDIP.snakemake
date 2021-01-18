@@ -1,0 +1,208 @@
+shell.prefix('set -x; set -e;')
+
+sample_ids = open("metadata/{}/sample_ids.txt".format(config["dataset"])).read().strip().split("\n")
+indir = "data/{}".format(config["dataset"])
+outdir = "output/{}".format(config["dataset"])
+
+rule all:
+    input:
+        #dmrs = "{outdir}/DMR/DMR.txt".format(dataset),
+        bigwig = expand("{outdir}/bigwig/{sample_id}.bigwig",outdir=[outdir],sample_id=sample_ids),
+        qc0 = expand("{outdir}/qc0/{sample_id}/{sample_id}_1_fastqc.html",outdir=[outdir],sample_id=sample_ids),
+        qc1 = expand("{outdir}/qc1/{sample_id}/{sample_id}_1_fastqc.html",outdir=[outdir],sample_id=sample_ids),
+        summary = expand("{outdir}/summary/quality-control.txt",outdir=[outdir])
+        #qc2 = expand("{outdir}/enrichment/{sample_id}.txt",outdir=[outdir],sample_id=sample_ids),
+        #qc3 = expand("{outdir}/saturation/{sample_id}.txt",outdir=[outdir],sample_id=sample_ids)
+        
+
+rule qc0:
+    input:
+        mate1=indir+'/{sample_id}_1.fastq.gz',
+        mate2=indir+'/{sample_id}_2.fastq.gz'
+    output:
+        report1='{outdir}/qc0/{sample_id}/{sample_id}_1_fastqc.html',
+        report2='{outdir}/qc0/{sample_id}/{sample_id}_2_fastqc.html'
+    params:
+        outdir='{outdir}/qc0/{sample_id}'
+    shell:
+        """
+        fastqc -o {params.outdir} {input.mate1} 
+        fastqc -o {params.outdir} {input.mate2}
+        """
+
+rule cutadapt:
+    input:
+        fastq1=indir+'/{sample_id}_1.fastq.gz',
+        fastq2=indir+'/{sample_id}_2.fastq.gz'
+    output:
+        fastq1='{outdir}/cutadapt/{sample_id}_1.fastq.gz',
+        fastq2='{outdir}/cutadapt/{sample_id}_2.fastq.gz'
+    params:
+        adaptor1=config["adaptor1"],
+        adaptor2=config["adaptor2"] 
+    threads:
+        1
+    log:
+        '{outdir}/log/{sample_id}/cutadapt.log'
+    shell:
+        """
+        cutadapt --pair-filter any -j {threads} -q 30,30 \
+        -a {params.adaptor1} -A {params.adaptor2} --trim-n -m 30 \
+        -o >(gzip -c > {output.fastq1}) -p >(gzip -c > {output.fastq2}) {input.fastq1} {input.fastq2} > {log} 2>&1
+        """
+
+rule qc1:
+    input:
+        fastq1='{outdir}/cutadapt/{sample_id}_1.fastq.gz',
+        fastq2='{outdir}/cutadapt/{sample_id}_2.fastq.gz'
+    output:
+        report1='{outdir}/qc1/{sample_id}/{sample_id}_1_fastqc.html',
+        report2='{outdir}/qc1/{sample_id}/{sample_id}_2_fastqc.html'
+    params:
+        outdir='{outdir}/qc1/{sample_id}'
+    shell:
+        """
+        fastqc -o {params.outdir} {input.fastq1}
+        fastqc -o {params.outdir} {input.fastq2}
+        """
+
+
+rule align:
+    input:
+        fastq1='{outdir}/cutadapt/{sample_id}_1.fastq.gz',
+        fastq2='{outdir}/cutadapt/{sample_id}_2.fastq.gz',
+        index='genome/index/bowtie2/genome.1.bt2'
+    log:
+        '{outdir}/log/{sample_id}/bowtie2.log'
+    params:
+        index='genome/index/bowtie2/genome',
+        unmapped_path='{outdir}/unmapped/{sample_id}_%.fastq.gz'
+    output:
+        bam="{outdir}/bam/{sample_id}.bam",
+        unmapped1='{outdir}/unmapped/{sample_id}_1.fastq.gz',
+        unmapped2='{outdir}/unmapped/{sample_id}_2.fastq.gz'
+    threads:
+        6 
+    shell:
+        """
+        bowtie2 -p {threads} -1 {input.fastq1} -2 {input.fastq2} \
+         --no-unal --un-conc-gz {params.unmapped_path} -x {params.index} 2> {log} | samtools view -b > {output.bam}
+        """
+
+
+rule filter_bam:
+    input:
+        bam="{outdir}/bam/{sample_id}.bam"
+    output:
+        bam="{outdir}/bam-filtered/{sample_id}.bam"
+    params:
+        min_size=config["insertion_min"],
+        max_size=config["insertion_max"]
+    shell:
+        """
+        (samtools view -H {input.bam}; samtools view -f 0x2 {input.bam} | \
+        awk -v min_size={params.min_size} -v max_size={params.max_size} \
+        '{{if($9>0){{size=$9}}else{{size=-$9}};if(size>=min_size&&size<=max_size){{print $0}}}}') | \
+        samtools view -b > {output.bam}
+        """
+
+
+rule sort:
+    input:
+        bam="{outdir}/bam-filtered/{sample_id}.bam"
+    output:
+        bam="{outdir}/bam-sorted/{sample_id}.bam"
+    shell:
+        """
+        samtools view -h -f 0x2 {input.bam} | samtools sort >  {output.bam} 
+        samtools index {output.bam}
+        """
+
+rule dedup:
+    input:
+        bam = "{outdir}/bam-sorted/{sample_id}.bam"
+    output:
+        bam = "{outdir}/bam-sorted-deduped/{sample_id}.bam",
+        bai = "{outdir}/bam-sorted-deduped/{sample_id}.bam.bai",
+        metrics = "{outdir}/log/{sample_id}/dedup-metrics.txt"
+    shell:
+        """
+         java -jar /BioII/lulab_b/jinyunfan/software/picard/picard.jar \
+            MarkDuplicates REMOVE_DUPLICATES=true \
+            ASSUME_SORT_ORDER=coordinate \
+            I={input.bam} \
+            O={output.bam} \
+            M={output.metrics} 
+        samtools index {output.bam}
+        """
+
+rule coverage:
+    input:
+        bam = "{outdir}/bam-sorted/{sample_id}.bam" if not config["dedup"] else "{outdir}/bam-sorted-deduped/{sample_id}.bam",
+        bai = "{outdir}/bam-sorted/{sample_id}.bam.bai" if not config["dedup"] else "{outdir}/bam-sorted-deduped/{sample_id}.bam.bai"
+    output:
+        bigwig = "{outdir}/bigwig/{sample_id}.bigwig"
+    threads: 1
+    params:
+        binsize = config["binsize"]
+    shell:
+        """
+        bamCoverage --numberOfProcessors {threads} --extendReads --normalizeUsing CPM -b {input.bam} -o {output.bigwig} --binSize {params.binsize} 
+        """
+
+rule qc_enrichment:
+    input:
+        bam = "{outdir}/bam-sorted/{sample_id}.bam" if not config["dedup"] else "{outdir}/bam-sorted-deduped/{sample_id}.bam"
+    output:
+        enrichment = "{outdir}/enrichment/{sample_id}.txt"
+    params:
+        binsize = config["binsize"]
+    shell:
+        """
+        scripts/quality-control.R -i {input.bam} -m enrichment -w {params.binsize} -o {output.enrichment} 
+        """
+
+rule qc_saturation:
+    input:
+        bam = "{outdir}/bam-sorted/{sample_id}.bam" if not config["dedup"] else "{outdir}/bam-sorted-deduped/{sample_id}.bam"
+    output:
+        saturation = "{outdir}/saturation/{sample_id}.txt"
+    params:
+        binsize = config["binsize"]
+    shell:
+        """
+        scripts/quality-control.R -i {input.bam} -m saturation -w {params.binsize} -o {output.saturation} 
+        """
+
+
+rule summarize_post_qc:
+    input:
+        enrichments = expand("{outdir}/enrichment/{sample_id}.txt",outdir=[outdir],sample_id=sample_ids),
+        saturations = expand("{outdir}/saturation/{sample_id}.txt",outdir=[outdir],sample_id=sample_ids)
+    output:
+        summary = "{outdir}/summary/quality-control.txt"
+    run:
+        import pandas as pd
+        sample_ids = [path.split("/")[-1].split(".")[0] for path in input.enrichments]
+        records = []
+        for sample_id in sample_ids:
+            enrichment_path = wildcards.outdir + "/enrichment/{}.txt".format(sample_id)
+            with open(enrichment_path) as f:
+                for line in f:
+                    key,value = line.strip().split("\t")
+                    if key == "enrichment.score.relH":
+                        relH = value
+                    elif key == "enrichment.score.GoGe":
+                        GoGe = value
+            saturation_path = wildcards.outdir + "/saturation/{}.txt".format(sample_id)
+            sat_df = pd.read_csv(saturation_path,sep="\t") 
+            es_sat_df = sat_df[sat_df["data"]=="estimated"]
+            estimated_saturation = es_sat_df.sort_values(by="subset")["correlation"].iloc[-1]
+            ob_sat_df = sat_df[sat_df["data"]=="observed"]
+            observed_saturation = ob_sat_df.sort_values(by="subset")["correlation"].iloc[-1]
+            records.append((sample_id,relH,GoGe,estimated_saturation,observed_saturation))
+        table = pd.DataFrame.from_records(records)
+        table.columns = ["sample_id","enrichment.score.relH","enrichment.score.GoGe","estimated.max.saturation","observed.max.saturation"]
+        table.to_csv(output.summary,sep="\t",index=False)
+
+                    
