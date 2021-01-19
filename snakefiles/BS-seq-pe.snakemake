@@ -40,17 +40,39 @@ rule qc0:
         fastqc -o {params.outdir} {input.fastq2}
         """
 
+rule extractUMI:
+    input:
+        fastq1 = indir+'/{sample_id}_1.fastq.gz',
+        fastq2 = indir+'/{sample_id}_2.fastq.gz'
+    output:
+        fastq1 = '{outdir}/UMI-extracted/{sample_id}_1.fastq.gz',
+        fastq2 = '{outdir}/UMI-extracted/{sample_id}_2.fastq.gz',
+    log:
+        log = '{outdir}/log/{sample_id}/extract-UMI.txt'
+    shell:
+        """
+        umi_tools extract --extract-method=string -I {input.fastq1} --read2-in={input.fastq2} --bc-pattern=NNNNN \
+        --stdout={outdir}/UMI-extracted/{wildcards.sample_id}_tmp_1.fastq.gz \
+        --read2-out={wildcards.outdir}/UMI-extracted/{wildcards.sample_id}_tmp_2.fastq.gz  > {log.log} 2>&1
+        
+        zcat {wildcards.outdir}/UMI-extracted/{wildcards.sample_id}_tmp_1.fastq.gz | awk 'NR%4==1{{gsub("_",":",$1);print $1;next;}}{{print}}' | gzip -c > {output.fastq1}
+        zcat {wildcards.outdir}/UMI-extracted/{wildcards.sample_id}_tmp_2.fastq.gz | awk 'NR%4==1{{gsub("_",":",$1);print $1;next;}}{{print}}' | gzip -c > {output.fastq2}
+        
+        rm {wildcards.outdir}/UMI-extracted/{wildcards.sample_id}_tmp_1.fastq.gz
+        rm {wildcards.outdir}/UMI-extracted/{wildcards.sample_id}_tmp_2.fastq.gz
+        """
+
+
 rule trimming:
     input:
-        fastq1=indir+'/{sample_id}_1.fastq.gz',
-        fastq2=indir+'/{sample_id}_2.fastq.gz'
+        fastq1 = indir + '/{sample_id}_1.fastq.gz' if config["protocol"] != "MCTA" else '{outdir}/UMI-extracted/{sample_id}_1.fastq.gz',
+        fastq2 = indir + '/{sample_id}_2.fastq.gz' if config["protocol"] != "MCTA" else '{outdir}/UMI-extracted/{sample_id}_2.fastq.gz'
     output:
         fastq1 = '{outdir}/trimmed/{sample_id}_1.fastq.gz',
         fastq2 = '{outdir}/trimmed/{sample_id}_2.fastq.gz',
     params:
         outdir='{outdir}/trimmed',
         quality = 30,
-        protocol = config["protocol"],
         direction = "--non_directional" if ( not config["directional"] and config["protocol"] == "RRBS" ) else "",
         clip1 = "--clip_R1 " + str(config["clip1"]) if config["clip1"] > 0 else "",
         clip1_3p = "--three_prime_clip_R1 " + str(config["clip1_3p"]) if config["clip1_3p"] > 0 else "", 
@@ -72,14 +94,7 @@ rule trimming:
         --cores {threads} --quality {params.quality} {params.direction} \
         -o {params.outdir} --basename {wildcards.sample_id} {input.fastq1} {input.fastq2} > {log.log} 2>&1
 
-        # Rename cleaned fastq files
-        if [ {params.protocol} = "MCTA" ];then
-        umi_tools extract --extract-method=string -I {params.outdir}/{wildcards.sample_id}_val_1.fq.gz --read2-in={params.outdir}/{wildcards.sample_id}_val_2.fq.gz --bc-pattern=NNNNN --stdout={output.fastq1} --read2-out={output.fastq2} >> {log.log} 2>&1
-        zcat {output.fastq1} | awk 'NR%4==1{{gsub("_",":",$1);print $1;next;}}{{print}}' | gzip -c > {params.outdir}/{wildcards.sample_id}_val_1.fq.gz
-        zcat {output.fastq2} | awk 'NR%4==1{{gsub("_",":",$1);print $1;next;}}{{print}}' | gzip -c > {params.outdir}/{wildcards.sample_id}_val_2.fq.gz
-        rm {output.fastq1} {output.fastq2}
-        fi
-        
+       
         # Rename cleaned fastq
         mv {params.outdir}/{wildcards.sample_id}_val_1.fq.gz {output.fastq1}
         mv {params.outdir}/{wildcards.sample_id}_val_2.fq.gz {output.fastq2}
