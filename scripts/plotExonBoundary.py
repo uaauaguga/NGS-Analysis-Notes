@@ -57,7 +57,7 @@ def main():
     #chr1	HAVANA	exon	12613	12721 
            
              
-            
+    print("Load bam file ...")            
     bam = HTSeq.BAM_Reader(args.input)
     for read1,read2 in tqdm(HTSeq.pair_SAM_alignments_with_buffer(bam,max_buffer_size=5000000)):
         if (read1 is None) or (read2 is None):
@@ -77,8 +77,10 @@ def main():
             if cigop.type != "M":
                 continue
             ga2[ checkStrandness(cigop.ref_iv,"2",args.strandness) ] += 1  
-
+    print("Done.")
     
+
+    print("Get coverage of exons in gtf annotation ...")
     fivePrime1 = np.zeros(100)
     fivePrime2 = np.zeros(100)
     threePrime1 = np.zeros(100)
@@ -106,6 +108,7 @@ def main():
                 fivePrime2 += np.fromiter(ga2[fivePrimeBoundary],dtype="i")[::-1]
                 threePrime1 += np.fromiter(ga1[threePrimeBoundary],dtype="i")[::-1]
                 threePrime2 += np.fromiter(ga2[threePrimeBoundary],dtype="i")[::-1]
+    print("Done .")
     df = pd.DataFrame({"read1-5p":fivePrime1,"read1-3p":threePrime1,"read2-5p":fivePrime2,"read2-3p":threePrime2})
     df.to_csv(args.coverage,sep="\t")
     if args.pdf is not None:
