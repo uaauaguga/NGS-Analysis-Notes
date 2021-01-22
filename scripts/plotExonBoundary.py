@@ -21,20 +21,20 @@ def checkStrandness(iv,mate,strandness):
 def plotCoverage(df,path):
     fig,axes = plt.subplots(2,2,figsize=(7,7),sharey=True) #,sharex=True, 
     coordinate = np.arange(-50,50)
-    axes[0,0].plot(coordinate,df["read1-5p"].values/df["read1-5p"].sum(),color="black",lw=2.5)
+    axes[0,0].plot(coordinate,df["read1-5p"].values,color="black",lw=2.5)
     axes[0,0].set_title("Read1-Exon-5-Prime",fontsize=13,weight="bold")
-    axes[0,0].set_ylim([0,0.02])
-    axes[0,1].plot(coordinate,df["read1-3p"].values/df["read1-3p"].sum(),color="black",lw=2.5)
+    axes[0,0].set_ylim([0,df["read1-5p"].max()*1.02])
+    axes[0,1].plot(coordinate,df["read1-3p"].values,color="black",lw=2.5)
     axes[0,1].set_title("Read1-Exon-3-Prime",fontsize=13,weight="bold")
-    axes[1,0].plot(coordinate,df["read2-5p"].values/df["read2-5p"].sum(),color="black",lw=2.5)
+    axes[1,0].plot(coordinate,df["read2-5p"].values,color="black",lw=2.5)
     axes[1,0].set_title("Read2-Exon-5-Prime",fontsize=13,weight="bold")
-    axes[1,1].plot(coordinate,df["read2-3p"].values/df["read2-3p"].sum(),color="black",lw=2.5)
+    axes[1,1].plot(coordinate,df["read2-3p"].values,color="black",lw=2.5)
     axes[1,1].set_title("Read2-Exon-3-Prime",fontsize=13,weight="bold")
     for i in [0,1]:
         for j in [0,1]:
             axes[i,j].tick_params(labelsize=13)
-    _ = fig.text(0.5, 0.05, 'Position Relative to Boundary', ha='center',fontsize=18,weight="bold")
-    _ = fig.text(0, 0.5, 'Coverage', va='center', rotation='vertical',fontsize=18,weight="bold")
+    _ = fig.text(0.5, 0.05, 'Position Relative to Boundary', ha='center',fontsize=17,weight="bold")
+    _ = fig.text(0, 0.5, 'Average Coverage', va='center', rotation='vertical',fontsize=17,weight="bold")
     plt.savefig(path,bbox_inches="tight")
 
 
@@ -42,6 +42,7 @@ def main():
     parser = argparse.ArgumentParser(description='Assign reads to different genomic regions')
     parser.add_argument('--input','-i',type=str,required=True,help="Input bam file, should in hg38 coordinate")
     parser.add_argument('--strandness','-s',type=str,default="no",choices=["forward","reverse","no"])
+    parser.add_argument('--filter','-f',type=int,default=3,help="Only consider exon with mean coverage higher than this value")
     parser.add_argument('--gtf','-a',type=str,default="genome/gtf/gencode.v27.annotation.gtf",help="gtf annotation")
     parser.add_argument('--coverage','-c',type=str,required=True,help="Output coverage")
     parser.add_argument('--pdf','-p',type=str,default=None,help="Output coverage plot")
@@ -80,6 +81,7 @@ def main():
     print("Done.")
     
 
+    exonNumber = 0
     print("Get coverage of exons in gtf annotation ...")
     fivePrime1 = np.zeros(100)
     fivePrime2 = np.zeros(100)
@@ -97,19 +99,27 @@ def main():
             if strand == "+":
                 fivePrimeBoundary = HTSeq.GenomicInterval(fields[0],int(fields[3])-1-50,int(fields[3])+49,strand)
                 threePrimeBoundary = HTSeq.GenomicInterval(fields[0],int(fields[4])-1-50,int(fields[4])+49,strand)
-                fivePrime1 += np.fromiter(ga1[fivePrimeBoundary],dtype="i")
-                fivePrime2 += np.fromiter(ga2[fivePrimeBoundary],dtype="i")
-                threePrime1 += np.fromiter(ga1[threePrimeBoundary],dtype="i")
-                threePrime2 += np.fromiter(ga2[threePrimeBoundary],dtype="i")
+                fivePrime1_ = np.fromiter(ga1[fivePrimeBoundary],dtype="i")
+                fivePrime2_ = np.fromiter(ga2[fivePrimeBoundary],dtype="i")
+                threePrime1_ = np.fromiter(ga1[threePrimeBoundary],dtype="i")
+                threePrime2_ = np.fromiter(ga2[threePrimeBoundary],dtype="i")
             else:
                 fivePrimeBoundary = HTSeq.GenomicInterval(fields[0],int(fields[4])-1-50,int(fields[4])+49,strand)
                 threePrimeBoundary = HTSeq.GenomicInterval(fields[0],int(fields[3])-1-50,int(fields[3])+49,strand)
-                fivePrime1 += np.fromiter(ga1[fivePrimeBoundary],dtype="i")[::-1]
-                fivePrime2 += np.fromiter(ga2[fivePrimeBoundary],dtype="i")[::-1]
-                threePrime1 += np.fromiter(ga1[threePrimeBoundary],dtype="i")[::-1]
-                threePrime2 += np.fromiter(ga2[threePrimeBoundary],dtype="i")[::-1]
+                fivePrime1_ = np.fromiter(ga1[fivePrimeBoundary],dtype="i")[::-1]
+                fivePrime2_ = np.fromiter(ga2[fivePrimeBoundary],dtype="i")[::-1]
+                threePrime1_ = np.fromiter(ga1[threePrimeBoundary],dtype="i")[::-1]
+                threePrime2_ = np.fromiter(ga2[threePrimeBoundary],dtype="i")[::-1]
+            if (fivePrime1_.mean() > args.filter) or (fivePrime1_.mean() > args.filter) or (fivePrime1_.mean() > args.filter) or (fivePrime1_.mean() > args.filter):
+                exonNumber += 1
+                fivePrime1 += fivePrime1_
+                fivePrime2 += fivePrime2_
+                threePrime1 += threePrime1_
+                threePrime2 += threePrime2_
+            
     print("Done .")
     df = pd.DataFrame({"read1-5p":fivePrime1,"read1-3p":threePrime1,"read2-5p":fivePrime2,"read2-3p":threePrime2})
+    df = df/exonNumber
     df.to_csv(args.coverage,sep="\t")
     if args.pdf is not None:
         plotCoverage(df,args.pdf)
