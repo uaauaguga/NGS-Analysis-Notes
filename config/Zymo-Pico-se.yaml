@@ -1,0 +1,23 @@
+dataset: Zymo-Pico-se #GSE142241-se
+
+# Parammeters
+
+protocol: WGBS
+alignment_mode: end-to-end 
+remove_duplications: true
+
+## https://rawgit.com/FelixKrueger/Bismark/master/Docs/Bismark_User_Guide.html
+## Zymo Pico-Methyl
+directional: false
+clip: 10
+clip_3p: 0
+
+
+ignore: 0
+
+
+# Running step
+qc0: true
+qc1: true
+mapping: true
+coverage: true

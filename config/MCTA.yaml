@@ -1,0 +1,22 @@
+dataset: GSE124600
+protocol: MCTA
+
+remove_duplications: true
+directional: false
+alignment_mode: local
+
+
+# Clipping reads after remove UMI
+clip1: 7
+clip1_3p: 6
+clip2: 6
+clip2_3p: 12
+
+ignore_r1: 0
+ignore_r2: 0
+
+
+qc0: true
+qc1: true
+mapping: true
+coverage: true

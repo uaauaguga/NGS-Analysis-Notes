@@ -1,0 +1,18 @@
+dataset: RRBS-se #GSE79277-RRBS-single
+
+protocol: RRBS
+alignment_mode: end-to-end 
+remove_duplications: false
+directional: true
+
+clip: 0
+clip_3p: 0
+
+
+ignore: 0
+
+qc0: true
+qc1: true
+mapping: true
+coverage: true
+

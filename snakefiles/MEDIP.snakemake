@@ -159,7 +159,7 @@ rule qc_enrichment:
         binsize = config["binsize"]
     shell:
         """
-        scripts/quality-control.R -i {input.bam} -m enrichment -w {params.binsize} -o {output.enrichment} 
+        scripts/MEDIP-quality-control.R  -i {input.bam} -m enrichment -w {params.binsize} -o {output.enrichment} 
         """
 
 rule qc_saturation:
@@ -171,7 +171,7 @@ rule qc_saturation:
         binsize = config["binsize"]
     shell:
         """
-        scripts/quality-control.R -i {input.bam} -m saturation -w {params.binsize} -o {output.saturation} 
+        scripts/MEDIP-quality-control.R  -i {input.bam} -m saturation -w {params.binsize} -o {output.saturation} 
         """
 
 
