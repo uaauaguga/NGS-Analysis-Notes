@@ -52,7 +52,9 @@ def main(args):
     matrix = matrix.loc[tx2tss.index,:]
     
     matrix["promoter_id"] = promoter_info.loc[matrix.index]
-    tpmByPromoter = matrix.groupby("promoter_id").sum(axis=0)
+    matrix.to_csv("test2.txt",sep="\t")
+    tpmByPromoter = matrix.groupby("promoter_id").apply(lambda x:x.sum(axis=0))
+    del tpmByPromoter["promoter_id"]
     tpmByPromoter.to_csv(args.output,sep="\t")
     print("Done .")
 
