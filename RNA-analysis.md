@@ -60,6 +60,13 @@
         --filter-name DP10 -filter "DP < 10.0" \
         --filter-name QUAL20 -filter "QUAL < 20.0" -O {output.vcf} 2> {log} 
   ```
+
+### Remove known RNA editing sites from called SNP
+```
+## -v means only keep variants not appear in range specified in -b file
+bedtools intersect -v -header -a {input.vcf(.gz)} -b genome/vcf/REDIportal.vcf.gz | bgzip -c > {output.vcf.gz}
+```
+
   
 ### RNA editing analysis
   - long RNA editing analysis
