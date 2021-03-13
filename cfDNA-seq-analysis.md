@@ -9,3 +9,4 @@
   ``` 
 - Run `snakefiles/cfDNA-pipeline.snakemake` with in manta-env
 - `/BioII/lulab_b/jinyunfan/projects/diagnostic-marker/cfDNA/Snakefile` is the same file
+- Reference genome and related annotations are in `/BioII/lulab_b/jinyunfan/projects/diagnostic-marker/cfDNA/genome`
