@@ -1,0 +1,303 @@
+shell.prefix('set -x; set -e;')
+
+config = {"sample_id_path":"metadata/test/sample_ids.txt","indir":"data/test","outdir":"output/test"}
+
+sample_ids = open(config["sample_id_path"]).read().strip().split("\n")
+indir = config["indir"]
+outdir = config["outdir"]
+
+rule all:
+    input:
+       qc0 = expand("{outdir}/qc0/{sample_id}/{sample_id}_1_fastqc.html",outdir=outdir,sample_id=sample_ids),
+       qc1 = expand("{outdir}/qc1/{sample_id}/{sample_id}_1_fastqc.html",outdir=outdir,sample_id=sample_ids),
+       single_nucleotide_variations = expand("{outdir}/SNV/{sample_id}.vcf.gz",outdir=outdir,sample_id=sample_ids),
+       stat = expand("{outdir}/stats/{sample_id}.txt",outdir=outdir,sample_id=sample_ids),
+       flagstat = expand("{outdir}/flagstat/{sample_id}.txt",outdir=outdir,sample_id=sample_ids),
+       fragsize = expand("{outdir}/fragment-length/histogram.txt",outdir=outdir),
+       microbe = expand("{outdir}/microbe/report/{sample_id}.txt",outdir=outdir,sample_id=sample_ids),
+       bin_counts = expand("{outdir}/segment-coverage/{sample_id}.bed",outdir=outdir,sample_id=sample_ids),
+       structure_variations = expand("{outdir}/struatural-variation/{sample_id}/results/variants/candidateSV.vcf.gz",outdir=outdir,sample_id=sample_ids)
+
+
+rule qc0:
+    input:
+        fastq1=indir+'/{sample_id}_1.fastq.gz',
+        fastq2=indir+'/{sample_id}_2.fastq.gz'
+    output:
+        report1='{outdir}/qc0/{sample_id}/{sample_id}_1_fastqc.html',
+        report2='{outdir}/qc0/{sample_id}/{sample_id}_2_fastqc.html'
+    params:
+        outdir='{outdir}/qc0/{sample_id}'
+    shell:
+        """
+        fastqc -o {params.outdir} {input.fastq1} 
+        fastqc -o {params.outdir} {input.fastq2}
+        """
+
+rule trimming:
+    input:
+        fastq1=indir+'/{sample_id}_1.fastq.gz',
+        fastq2=indir+'/{sample_id}_2.fastq.gz'
+    output:
+        fastq1 = '{outdir}/cutadapt/{sample_id}_1.fastq.gz',
+        fastq2 = '{outdir}/cutadapt/{sample_id}_2.fastq.gz',
+        report1 = '{outdir}/log/{sample_id}/trimming_statistics_1.txt',
+        report2 = '{outdir}/log/{sample_id}/trimming_statistics_2.txt',
+    params:
+        outdir='{outdir}/cutadapt',
+        quality = 30 
+    threads:
+        4
+    log:
+        log = '{outdir}/log/{sample_id}/trimming.txt'
+    shell:
+        """
+        trim_galore --phred33 --paired  --cores {threads} --quality {params.quality} -o {params.outdir} --basename {wildcards.sample_id} {input.fastq1} {input.fastq2} > {log.log} 2>&1
+        mv {params.outdir}/{wildcards.sample_id}_val_1.fq.gz {output.fastq1}
+        mv {params.outdir}/{wildcards.sample_id}_val_2.fq.gz {output.fastq2}
+        mv {params.outdir}/{wildcards.sample_id}_1.fastq.gz_trimming_report.txt {output.report1}
+        mv {params.outdir}/{wildcards.sample_id}_2.fastq.gz_trimming_report.txt {output.report2}
+        """
+
+
+# Quality control after adapter trimming
+rule qc1:
+    input:
+        fastq1='{outdir}/cutadapt/{sample_id}_1.fastq.gz',
+        fastq2='{outdir}/cutadapt/{sample_id}_2.fastq.gz'
+    output:
+        report1='{outdir}/qc1/{sample_id}/{sample_id}_1_fastqc.html',
+        report2='{outdir}/qc1/{sample_id}/{sample_id}_2_fastqc.html'
+    params:
+        outdir='{outdir}/qc1/{sample_id}'
+    shell:
+        """
+        fastqc -o {params.outdir} {input.fastq1}
+        fastqc -o {params.outdir} {input.fastq2}
+        """
+
+
+# Mapping with bwa
+rule bwa_alignment:
+    input:
+        fastq1 = '{outdir}/cutadapt/{sample_id}_1.fastq.gz',
+        fastq2 = '{outdir}/cutadapt/{sample_id}_2.fastq.gz',
+        index = 'genome/bwa-index/hg38.bwt' 
+    output:
+        bam = "{outdir}/bam/{sample_id}.bam",
+    params:
+        index = "genome/bwa-index/hg38",
+    threads:
+        8
+    log:
+        '{outdir}/log/{sample_id}/bwa-alignment.txt'
+    shell:
+        '''
+        bwa mem -T 0 -M -t {threads} {params.index} {input.fastq1} {input.fastq2} | samtools view -b > {output.bam} 2> {log}
+        '''
+
+# Get unmapped reads from bwa's bam file
+rule getUnaligned:
+    input:
+        bam = "{outdir}/bam/{sample_id}.bam"
+    output:
+        unmapped_1 = "{outdir}/unmapped/{sample_id}_1.fastq.gz",
+        unmapped_2 = "{outdir}/unmapped/{sample_id}_2.fastq.gz",
+    log:
+        '{outdir}/log/{sample_id}/get-unaligned.txt'
+    shell:
+        '''
+        samtools fastq -1 {output.unmapped_1} -2 {output.unmapped_2} -0 /dev/null -s /dev/null -f 13 {input.bam} 2> {log}
+        '''
+
+
+# Generate flag statistics in bam file
+rule flagstat:
+    input:
+        bam = "{outdir}/bam/{sample_id}.bam"
+    output:
+        flagstat = "{outdir}/flagstat/{sample_id}.txt"
+    shell:
+        """
+        samtools flagstat {input.bam} > {output.flagstat}
+        """ 
+
+
+rule sort:
+    input:
+        bam = "{outdir}/bam/{sample_id}.bam"
+    output:
+        bam = "{outdir}/bam-sorted/{sample_id}.bam",
+        bai = "{outdir}/bam-sorted/{sample_id}.bam.bai"
+    threads: 2
+    shell:
+        """
+        samtools view -h -F 0x4  {input.bam} | samtools sort  -@ {threads}  > {output.bam}
+        samtools index {output.bam}
+        """
+
+rule dedup:
+    input:
+        bam = "{outdir}/bam-sorted/{sample_id}.bam"
+    output:
+        bam = "{outdir}/bam-sorted-deduped/{sample_id}.bam",
+        bai = "{outdir}/bam-sorted-deduped/{sample_id}.bam.bai",
+        metrics = "{outdir}/log/{sample_id}/dedup-metrics.txt"
+    log:
+        "{outdir}/log/{sample_id}/MarkDuplicates.log"
+    shell:
+        """
+         gatk MarkDuplicates --REMOVE_DUPLICATES true \
+            --ASSUME_SORT_ORDER coordinate \
+            -I {input.bam} \
+            -O {output.bam} \
+            -M {output.metrics} > {log} 2>&1
+        samtools index {output.bam}
+        """
+
+
+rule getBamStatistics:
+    input:
+        bam = "{outdir}/bam-sorted-deduped/{sample_id}.bam"
+    output:
+        summary = "{outdir}/stats/{sample_id}.txt"
+    shell:
+        """
+        samtools stats {input.bam} > {output.summary}
+        """
+
+
+# Summarize histogram of fragment length from samtools stats output
+rule getFragmentSize:
+    input:
+        stats = expand("{outdir}/stats/{sample_id}.txt",outdir=outdir,sample_id=sample_ids)
+    output:
+        hist = "{outdir}/fragment-length/histogram.txt"
+    run:
+        import re
+        import pandas as pd
+        records = []
+        for path in input.stats:
+            sample_id = re.sub(".txt$","",path.split("/")[-1])
+            with open(path) as f:
+                for line in f:
+                    if not line.startswith("IS"):
+                        continue
+                    #IS, insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs
+                    fields = line.strip().split("\t")
+                    IS, N = fields[1],fields[3]
+                    records.append((sample_id,int(IS),int(N)))
+        fsHistTable = pd.DataFrame.from_records(records)
+        fsHistTable.columns = ["sample_id","insertion-size","count"]
+        fsHist = fsHistTable.pivot(index="insertion-size",columns="sample_id",values="count")
+        fsHist.to_csv(output.hist,sep="\t")
+                                                                    
+
+# Add a dummy read group as gatk's caller requires this
+rule addReadsGroup:
+    input:
+        bam = "{outdir}/bam-sorted-deduped/{sample_id}.bam"
+    output:
+        bam = "{outdir}/bam-sorted-deduped-RG/{sample_id}.bam",
+        bai = "{outdir}/bam-sorted-deduped-RG/{sample_id}.bam.bai"
+    log:
+        '{outdir}/log/{sample_id}/addReadsGroup.log'
+    shell:
+        """
+        gatk AddOrReplaceReadGroups --java-options -Xmx4G \
+        --INPUT {input.bam} --OUTPUT {output.bam} -SO coordinate \
+        --RGLB library --RGPL illumina --RGPU HiSeq2000 --RGSM {wildcards.sample_id} > {log} 2>&1
+        samtools index {output.bam}
+        """
+
+# Call SNV
+rule HaplotypeCaller:
+    input:
+        bam='{outdir}/bam-sorted-deduped-RG/{sample_id}.bam',
+        reference="genome/fasta/hg38.fa"
+    output:
+        vcf = "{outdir}/SNV/{sample_id}.vcf.gz"
+    log:
+        '{outdir}/log/{sample_id}/HaplotypeCaller.log'
+    params:
+        tmp = "tmp"
+    shell:
+        """
+        gatk HaplotypeCaller --java-options -Xmx4G -R {input.reference} \
+        -I {input.bam} -O {output.vcf} \
+        --tmp-dir {params.tmp}  > {log} 2>&1
+        """
+
+# Classifiy microbe with kraken2    
+rule countMicrobe:
+    input:
+        unmapped_1 = "{outdir}/unmapped/{sample_id}_1.fastq.gz",
+        unmapped_2 = "{outdir}/unmapped/{sample_id}_2.fastq.gz",
+        database = "/Share2/home/lulab/jinyunfan/data/kraken2db/standard-db"
+    output:
+        report = "{outdir}/microbe/report/{sample_id}.txt",
+        unclassified_1 = "{outdir}/microbe/unclassified/{sample_id}_1.fastq.gz",
+        unclassified_2 = "{outdir}/microbe/unclassified/{sample_id}_2.fastq.gz",
+        assignment = "{outdir}/microbe/assignment/{sample_id}.txt.gz"
+    params:
+        unclassified="{outdir}/microbe/unclassified/{sample_id}#.fastq",
+    threads:
+        6
+    log:
+        '{outdir}/log/{sample_id}/kraken2-classification.log'
+    shell:
+        """
+        LANG=C perl -e exit
+        kraken2 --db {input.database} --paired --threads {threads} --unclassified-out {params.unclassified} --report {output.report}  --use-names  {input.unmapped_1} {input.unmapped_2}  >  {output.assignment} 2> {log}
+        gzip  {output.assignment}
+        gzip  {wildcards.outdir}/microbe/unclassified/{wildcards.sample_id}_1.fastq 
+        gzip  {wildcards.outdir}/microbe/unclassified/{wildcards.sample_id}_2.fastq 
+        """
+
+
+# Read counts of each 100kb bins across genome with repeats excluded
+rule getSegmentCoverage:
+    input:
+        bam = "{outdir}/bam-sorted-deduped/{sample_id}.bam",
+        gappedbins = "genome/hg38.bins.100kb.norepeats.bed",
+        bins = "genome/hg38.bins.100kb.bed"
+    output:
+        coverage = "{outdir}/segment-coverage/{sample_id}.bed"
+    shell:
+        """
+        bedtools coverage -a {input.gappedbins} -b {input.bam} -counts > {output.coverage}.tmp
+        bedtools map -a {input.bins} -b {output.coverage}.tmp  -c 4 -o sum > {output.coverage}
+        rm {output.coverage}.tmp
+        """
+
+
+
+# Config manta structural variation caller
+rule prepareMantaConfig:
+    input:
+        bam = "{outdir}/bam-sorted-deduped/{sample_id}.bam",
+        reference = "genome/fasta/hg38.fa"
+    output:
+        config = "{outdir}/struatural-variation/{sample_id}/runWorkflow.py.config.pickle",
+        script = "{outdir}/struatural-variation/{sample_id}/runWorkflow.py" 
+    shell:
+        """
+        configManta.py --bam {input.bam} --referenceFasta {input.reference} --runDir "{wildcards.outdir}/struatural-variation/{wildcards.sample_id}"
+        """
+
+# Call structure variation
+rule runMantan:
+    input:
+        bam = "{outdir}/bam-sorted-deduped/{sample_id}.bam",
+        reference = "genome/fasta/hg38.fa",
+        config = "{outdir}/struatural-variation/{sample_id}/runWorkflow.py.config.pickle",
+        script = "{outdir}/struatural-variation/{sample_id}/runWorkflow.py"
+    output:
+        sv = "{outdir}/struatural-variation/{sample_id}/results/variants/candidateSV.vcf.gz"
+    threads: 4
+    shell:
+        """
+        {input.script} -j {threads}
+        """
+
+
