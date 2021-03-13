@@ -1,7 +1,7 @@
 ## cfDNA sequencing data analysis
 ### Environment setting
 - Add `/BioII/lulab_b/jinyunfan/anaconda3/envs/bioinfo_py36/bin` to `$PATH`
-- Install manta for structural variation calling
+- Install [!manta](https://github.com/Illumina/manta) for structural variation calling
   ```bash
   conda create -n manta-env
   conda activate manta-env
