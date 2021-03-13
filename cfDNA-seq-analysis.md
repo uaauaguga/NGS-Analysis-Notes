@@ -8,3 +8,4 @@
   conda install -c bioconda manta
   ``` 
 - Run `snakefiles/cfDNA-pipeline.snakemake` with in manta-env
+- `/BioII/lulab_b/jinyunfan/projects/diagnostic-marker/cfDNA/Snakefile` is the same file
