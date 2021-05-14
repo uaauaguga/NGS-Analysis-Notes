@@ -95,7 +95,7 @@ bedtools intersect -v -header -a {input.vcf(.gz)} -b genome/vcf/REDIportal.vcf.g
   python2 /BioII/lulab_b/jinyunfan/software/rMATS.4.0.2/rMATS-turbo-Linux-UCS4/rmats.py --b1 output/test/splicing/bam-path/PDAC.txt  --b2 output/test/splicing/bam-path/HD.txt --gtf genome/gtf/gencode.v27.annotation.gtf --od output/test/splicing/rmats -t paired  --libType fr-firststrand --readLength 150
   ``` 
   - Summarize the result, assign a unique ID to each alternative splicing event
-  - The input pos and neg sample ids should same as that provided for rMATS
+  - The input pos and neg sample ids should have same order as that provided for rMATS, one sample id per-line
   - "splicing_type" is one of MXE A3SS A5SS SE RI 
   ```bash
   python3 scripts/summarize-splicing.py --input {rmats_outdir}/{splicing_type}.MATS.JC.txt  --outdir {outdir} --type {splicing_type} --method JC  --pos {pos}  --neg  {neg}
