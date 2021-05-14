@@ -1,4 +1,8 @@
 #!/usr/bin/env Rscript
+
+# Get CDS location relative to transcriptome coordiante from genome gtf file
+
+
 library(GenomicFeatures)
 gtf.path <- "Arabidopsis_thaliana.TAIR10.34.gtf"
 
