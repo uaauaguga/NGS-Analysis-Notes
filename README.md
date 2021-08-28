@@ -4,3 +4,4 @@
 - `RNA-analysis.md`: analysis gene expression and post-transcriptional regulation from RNA-seq data
 - `Methylation-analysis.md`: some notes for DNA methylation analysis 
 - `./plots` contains some scripts and notes may useful for plotting
+- `genome-annotation-resources.md`: notes on human genome annotation resources
