@@ -110,7 +110,7 @@ def main():
                 fivePrime2_ = np.fromiter(ga2[fivePrimeBoundary],dtype="i")[::-1]
                 threePrime1_ = np.fromiter(ga1[threePrimeBoundary],dtype="i")[::-1]
                 threePrime2_ = np.fromiter(ga2[threePrimeBoundary],dtype="i")[::-1]
-            if (fivePrime1_.mean() > args.filter) or (fivePrime1_.mean() > args.filter) or (fivePrime1_.mean() > args.filter) or (fivePrime1_.mean() > args.filter):
+            if (fivePrime1_.mean() > args.filter) or (fivePrime2_.mean() > args.filter) or (threePrime1_.mean() > args.filter) or (threePrime2_.mean() > args.filter):
                 exonNumber += 1
                 fivePrime1 += fivePrime1_
                 fivePrime2 += fivePrime2_
