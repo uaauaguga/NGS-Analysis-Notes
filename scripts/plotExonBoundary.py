@@ -99,6 +99,8 @@ def main():
             if strand == "+":
                 fivePrimeBoundary = HTSeq.GenomicInterval(fields[0],int(fields[3])-1-50,int(fields[3])+49,strand)
                 threePrimeBoundary = HTSeq.GenomicInterval(fields[0],int(fields[4])-1-50,int(fields[4])+49,strand)
+                if fivePrimeBoundary.start < 0 or threePrimeBoundary.start < 0:
+                    continue
                 fivePrime1_ = np.fromiter(ga1[fivePrimeBoundary],dtype="i")
                 fivePrime2_ = np.fromiter(ga2[fivePrimeBoundary],dtype="i")
                 threePrime1_ = np.fromiter(ga1[threePrimeBoundary],dtype="i")
@@ -106,6 +108,8 @@ def main():
             else:
                 fivePrimeBoundary = HTSeq.GenomicInterval(fields[0],int(fields[4])-1-50,int(fields[4])+49,strand)
                 threePrimeBoundary = HTSeq.GenomicInterval(fields[0],int(fields[3])-1-50,int(fields[3])+49,strand)
+                if fivePrimeBoundary.start < 0 or threePrimeBoundary.start < 0:
+                    continue
                 fivePrime1_ = np.fromiter(ga1[fivePrimeBoundary],dtype="i")[::-1]
                 fivePrime2_ = np.fromiter(ga2[fivePrimeBoundary],dtype="i")[::-1]
                 threePrime1_ = np.fromiter(ga1[threePrimeBoundary],dtype="i")[::-1]

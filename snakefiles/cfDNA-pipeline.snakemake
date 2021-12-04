@@ -93,7 +93,7 @@ rule bwa_alignment:
         '{outdir}/log/{sample_id}/bwa-alignment.txt'
     shell:
         '''
-        bwa mem -T 0 -M -t {threads} {params.index} {input.fastq1} {input.fastq2} | samtools view -b > {output.bam} 2> {log}
+        bwa mem -T 0 -t {threads} {params.index} {input.fastq1} {input.fastq2} | samtools view -b > {output.bam} 2> {log}
         '''
 
 # Get unmapped reads from bwa's bam file

@@ -1,0 +1,257 @@
+shell.prefix('set -x; set -e;')
+
+dataset = config["dataset"]
+sample_ids = open(f"data/{dataset}/sample_ids.txt").read().strip().split("\n")
+
+
+
+rule all:
+    input:
+        fastq = expand("output/{dataset}/processed/{sample_id}.fastq.gz",dataset=dataset,sample_id=sample_ids),
+        bam =  expand("output/{dataset}/bam/{sample_id}.bam",dataset=dataset,sample_id=sample_ids),
+        qc0 = expand("output/{dataset}/qc0/{sample_id}/{sample_id}_fastqc.html",dataset=dataset,sample_id=sample_ids),
+        #bigwig = expand("output/{dataset}/bigwig/{sample_id}.bigwig",dataset=dataset,sample_id=sample_ids),
+        peaks = expand("output/{dataset}/peaks/{method}/{sample_id}.bed",dataset=dataset,sample_id=sample_ids,method=config["methods"])
+        
+
+
+
+rule qc0:
+    input:
+        fastq = "data/{dataset}/fastq/{sample_id}.fastq.gz"
+    output:
+        report="output/{dataset}/qc0/{sample_id}/{sample_id}_fastqc.html",
+    shell:
+        """
+        fastqc -o output/{wildcards.dataset}/qc0/{wildcards.sample_id} {input.fastq}
+        """
+
+
+
+# Remove 3' adapter sequences
+rule clip_3p_adapter:
+    input:
+        fastq = "data/{dataset}/fastq/{sample_id}.fastq.gz"
+    output:
+        fastq = "output/{dataset}/trimmed/{sample_id}.fastq.gz"
+    params:
+        adapter = config["adapter"]
+    log:
+        clip = "output/{dataset}/log/{sample_id}/clip3p.log",
+        filter = "output/{dataset}/log/{sample_id}/filter.log",
+    shell:
+        """
+        gzip -d -c {input.fastq} \
+        | fastx_clipper -a {params.adapter} -l 13 -Q 33 -v 2> {log.clip} \
+        | fastq_quality_filter -q 20 -p 80 -Q 33 -v 2> {log.filter} \
+        | gzip -c > {output.fastq}
+        """
+
+
+# remove duplicated reads
+rule collapse_reads:
+    input:
+        fastq = "output/{dataset}/trimmed/{sample_id}.fastq.gz"
+    output:
+        fastq = "output/{dataset}/collapsed/{sample_id}.fastq.gz"
+    log:
+        collapse = "output/{dataset}/log/{sample_id}/collapse.log"
+    shell:
+        """
+        gzip -d -c {input.fastq} | fastx_collapser -Q 33 -v 2> {log.collapse} | gzip -c > {output.fastq} 
+        """
+
+
+# clip several 5' nucleotide in each reads, if barcode presents
+rule clip_5p:
+    input:
+        fastq = "output/{dataset}/collapsed/{sample_id}.fastq.gz"
+    output:
+        fastq = "output/{dataset}/processed/{sample_id}.fastq.gz"
+    params:
+        first_base = config["clip_5p"] + 1
+    log:
+        clip = "output/{dataset}/log/{sample_id}/clip5p.log"
+    shell:
+        """
+        gzip -d -c {input.fastq} | fastx_trimmer -v -f {params.first_base} 2> {log.clip} | gzip -c > {output.fastq}
+        """
+
+
+# map collapsed reads with bowtie
+rule mapping:
+    input:
+        fastq = "output/{dataset}/processed/{sample_id}.fastq.gz",
+        #index = f"genome/{config['organism']}/bowtie-index/genome.1.ebwt"
+    output:
+        bam = "output/{dataset}/bam/{sample_id}.bam",
+        bai = "output/{dataset}/bam/{sample_id}.bam.bai"
+    log: 
+        mapping = "output/{dataset}/log/{sample_id}/bowtie.log"
+    threads: 4
+    params:
+        organism = config["organism"]
+    shell:
+        """
+        bowtie -f -v 2 -m 1 -f --threads {threads} --best --strata --sam  genome/{params.organism}/bowtie-index/genome {input.fastq} 2> {log.mapping} | samtools sort -O bam > {output.bam}
+        samtools index {output.bam}
+        """
+
+
+rule get_coverage:
+    input:
+        bam = "output/{dataset}/bam/{sample_id}.bam"
+    output:
+        bedgraph = "output/{dataset}/bedgraph/{sample_id}.bedgraph"
+    shell:
+        """
+        bedtools genomecov -ibam {input.bam} -bg -split | LC_ALL=C sort -k1,1 -k2,2n > {output.bedgraph}
+        """
+
+rule get_bigwig:
+    input:
+        bedgraph = "output/{dataset}/bedgraph/{sample_id}.bedgraph",
+        chromsize = f"genome/{config['organism']}/chrom.size"
+    output:
+        bigwig = "output/{dataset}/bigwig/{sample_id}.bigwig"
+    log:
+        bigwig = "output/{dataset}/log/{sample_id}/bigwig.log"
+    shell:
+        """
+        bedGraphToBigWig {input.bedgraph} {input.chromsize} {output.bigwig} > {log.bigwig} 2>&1
+        """
+
+
+# Extract tag / reads position from bam file
+rule parse_alignment:
+    input:
+        bam = "output/{dataset}/bam/{sample_id}.bam"
+    output:
+        bed = "output/{dataset}/parsed/{sample_id}.bed",
+        mutation = "output/{dataset}/parsed/{sample_id}.mutation.txt"
+    shell:
+        """
+        export PERL5LIB=/BioII/lulab_b/jinyunfan/software/CTK/czplib 
+        samtools view -h {input.bam} | perl /BioII/lulab_b/jinyunfan/software/CTK/ctk/parseAlignment.pl -v \
+        --map-qual 1 --min-len 18 --mutation-file {output.mutation} - - > {output.bed}
+        """
+
+
+rule call_peak_piranha:
+    input:
+        bed = "output/{dataset}/parsed/{sample_id}.bed" 
+    output:
+        bed = "output/{dataset}/peaks/piranha/{sample_id}.bed"
+    log:
+        "output/{dataset}/log/{sample_id}/peak-calling/piranha.log"
+    shell:
+        """
+        Piranha -sort -b 20 -d ZeroTruncatedNegativeBinomial -p 0.01 {input.bed} -o {output.bed} > {log} 2>&1 
+        """
+
+
+rule call_peak_ctk:
+    input:
+        bed = "output/{dataset}/parsed/{sample_id}.bed"
+    output:
+        bed = "output/{dataset}/peaks/ctk/{sample_id}.bed"
+    log:
+        "output/{dataset}/log/{sample_id}/peak-calling/ctk.log"
+    shell:
+        """
+        export PERL5LIB=/BioII/lulab_b/jinyunfan/software/CTK/czplib
+        perl /BioII/lulab_b/jinyunfan/software/CTK/ctk/tag2peak.pl \
+       --valley-seeking -p 0.05 --valley-depth 0.9 --multi-test  {input.bed} {output.bed} > {log} 2>&1
+        """
+
+
+rule call_peak_pureclip:
+    input:
+        bam = "output/{dataset}/bam/{sample_id}.bam",
+        bai = "output/{dataset}/bam/{sample_id}.bam.bai",
+        genome = f"genome/{config['organism']}/fasta/genome.fa",
+        size = f"genome/{config['organism']}/chrom.size" 
+    output:
+        sites = "output/{dataset}/peaks/pureclip/{sample_id}.bed",
+        regions = "output/{dataset}/peaks/pureclip/{sample_id}.merged.bed",
+        parameters = "output/{dataset}/peaks/pureclip/{sample_id}.params"
+    log:
+        "output/{dataset}/log/{sample_id}/peak-calling/pureclip.log"
+    threads: 4
+    shell:
+        """
+        interval=$(cut -f 1 {input.size} | awk 'BEGIN{{ORS=";"}}NR<10{{print}}')
+        pureclip -i {input.bam} -bai {input.bai} -g {input.genome} -iv ${{interval}} -vv \
+        -o {output.sites} -or {output.regions} -nt {threads} -p {output.parameters} > {log} 2>&1
+        """
+
+
+rule get_substitution:
+    input:
+        mutation = "output/{dataset}/parsed/{sample_id}.mutation.txt"
+    output:
+        substitution = "output/{dataset}/parsed/{sample_id}.sub.bed"
+    log:
+        stats = "output/{dataset}/log/{sample_id}/get-substitution-stats.txt"
+    shell:
+        """
+        export PERL5LIB=/BioII/lulab_b/jinyunfan/software/CTK/czplib
+        perl /BioII/lulab_b/jinyunfan/software/CTK/ctk/getMutationType.pl -t sub --summary {log.stats} {input.mutation} {output.substitution}
+        """
+
+rule call_peak_CIMS:
+    input:
+        bed = "output/{dataset}/parsed/{sample_id}.bed",
+        substitution = "output/{dataset}/parsed/{sample_id}.sub.bed"
+    output:
+        bed = "output/{dataset}/peaks/CIMS/{sample_id}.bed"
+    log:
+        stats = "output/{dataset}/log/{sample_id}/CIMS-stats.txt",
+        log = "output/{dataset}/log/{sample_id}/peak-calling/CIMS.log"
+    shell:
+        """
+        export PERL5LIB=/BioII/lulab_b/jinyunfan/software/CTK/czplib
+        [ -d output/{wildcards.dataset}/peaks/CIMS/{wildcards.sample_id} ] && rm -r output/{wildcards.dataset}/peaks/CIMS/{wildcards.sample_id}
+        perl /BioII/lulab_b/jinyunfan/software/CTK/ctk/CIMS.pl -big -n 10 -p -outp {log.stats} -c output/{wildcards.dataset}/peaks/CIMS/{wildcards.sample_id} -v {input.bed} {input.substitution} {output.bed} > {log.log} 2>&1
+        """
+        
+rule call_peak_CITS:
+    input:
+        bed = "output/{dataset}/parsed/{sample_id}.bed",
+        substitution = "output/{dataset}/parsed/{sample_id}.sub.bed"
+    output:
+        bed = "output/{dataset}/peaks/CITS/{sample_id}.bed"
+    log:
+        log = "output/{dataset}/log/{sample_id}/peak-calling/CITS.log"
+    shell:
+        """
+        export PERL5LIB=/BioII/lulab_b/jinyunfan/software/CTK/czplib
+        [ -d output/{wildcards.dataset}/peaks/CITS/{wildcards.sample_id} ] && rm -r output/{wildcards.dataset}/peaks/CITS/{wildcards.sample_id}
+        perl /BioII/lulab_b/jinyunfan/software/CTK/ctk/CITS.pl -big -c output/{wildcards.dataset}/peaks/CITS/{wildcards.sample_id} -v {input.bed} {input.substitution} {output.bed} > {log.log} 2>&1
+        """
+
+
+rule call_peak_paralyzer:
+    input:
+        bam = "output/{dataset}/bam/{sample_id}.bam",
+        genome = f"genome/{config['organism']}/2bit/genome.2bit"
+    output:
+        cluster = "output/{dataset}/peaks/paralyzer/{sample_id}.cluster.txt",
+        group = "output/{dataset}/peaks/paralyzer/{sample_id}.group.txt",
+        distribution = "output/{dataset}/peaks/paralyzer/{sample_id}.distribution.txt",
+        bed = "output/{dataset}/peaks/paralyzer/{sample_id}.bed"
+    log:
+        "output/{dataset}/log/{sample_id}/peak-calling/paralyzer.log"
+    shell:
+        """
+        sam=output/{wildcards.dataset}/peaks/paralyzer/{wildcards.sample_id}.sam
+        config=output/{wildcards.dataset}/peaks/paralyzer/{wildcards.sample_id}.ini
+        
+        scripts/prepare-paralyzer-config.py -g {input.genome} -s $sam \
+        --cluster {output.cluster} --group {output.group} --distribution {output.distribution} -c $config
+        samtools view -h -F 0x4 {input.bam} > $sam
+        
+        /BioII/lulab_b/jinyunfan/software/PARalyzer/PARalyzer_v1_5/PARalyzer 15G $config > {log} 2>&1 
+        scripts/cluster2bed {output.cluster} > {output.bed}
+        rm $sam 
+        """
